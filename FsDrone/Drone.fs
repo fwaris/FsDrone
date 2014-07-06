@@ -4,55 +4,64 @@ open System
 open System.Net.Sockets
 open System.Net
 open System.Text
+open System.IO
+open IOUtils
 
 module Controller =
 
     let droneHost     = "192.168.1.1"
-    let controllPort  = 5559
+    let controlPort   = 5559
     let videoPort     = 5555
     let commandPort   = 5556
     let telemetryPort = 5554 //navdata
 
-    let openUdp (host:string) port = 
-        let client = new UdpClient()
-        client.Connect(host,port)
-        client
+    open FsDrone.CommandUtils
 
-    let openTcp (host:string) port =
-        let client = new TcpClient()
-        client.Connect(host,port)
-        client
-    
-    let _takeoff = 0b00010001010101000000000100000000
-    let _land    = 0b00010001010101000000000000000000
-    let _emrgncy = 0b00010001010101000000000010000000
+    type MonitorMsg =
+        | CommandPortError      of Exception
+        | TelemeteryPortError   of Exception
+        | VideoPortError        of Exception
+        | ControlPortError      of Exception
 
-    let toATCommand seq_no = function
-        | Land          -> sprintf "AT*REF%d,%d\r" seq_no _land
-        | Takeoff       -> sprintf "AT*REF%d,%d\r" seq_no _takeoff
-        | Emergency     -> sprintf "AT*REF%d,%d\r" seq_no _emrgncy
-        | Hover         -> sprintf "AT*PCMD=%d,%d,%d,%d,%d,%d\r" seq_no 0 0 0 0 0
-        | Progress (p)  -> sprintf "AT*PCMD_MAG=%d,%d,%f,%f,%f,%f,%f,%f\r" seq_no 1 p.Roll p.Pitch p.Lift p.Yaw p.Psi p.PsiAccuracy
-        | Flattrim      -> sprintf "AT*FTRIM=%d,\r" seq_no
-        | Calibrate i   -> sprintf "AT*CALIB=%d,%d,\r" seq_no i
-        | Config (k,v)  -> sprintf """AT*CONFIG=%d,"%s","%s"\r""" seq_no k v
-        | Watchdog      -> sprintf "AT*COMWDG=%d\r" seq_no
-
-    let openSender token (client:UdpClient)  =
+    let createSender token (skt:Socket) endpoint (monitor:Agent<MonitorMsg>) =
         let seqNum = ref 0
+        let buffer = new WriteBuffer(1000)
         Agent.Start(
             (fun inbox -> 
             async {
                 while true do
-                    let! msg = inbox.Receive()
-                    seqNum := !seqNum + 1
-                    let atCommand = toATCommand !seqNum msg
-                    let bytes = atCommand |> Encoding.ASCII.GetBytes
-                    client.Send(bytes,bytes.Length) |> ignore
+                    try
+                        let! msg = inbox.Receive()
+                        seqNum := !seqNum + 1
+                        buffer.Reset()
+                        let atCommand = toATCommand buffer.TextWriter !seqNum msg
+                        skt.SendTo(buffer.ByteArray,buffer.Length, SocketFlags.None, endpoint) |> ignore
+                    with ex -> 
+                        logEx ex
+                        ex |> CommandPortError |> monitor.Post
             }),
             token)
+
+    let startReceiver 
+        token (skt:Socket) endpoint fParser
+        (monitor:Agent<MonitorMsg>) (receiver:Agent<Telemetry>) =
+        //
+        let buffer = ReadBuffer(4096)
+        Async.Start (
+            async {
+                while true do 
+                    try
+                        buffer.Reset()
+                        let! read = skt.AsyncReceiveFrom(buffer.ByteArray,endpoint)
+                        let msg = fParser buffer.Reader read
+                        receiver.Post msg
+                    with ex ->
+                        logEx ex
+                        ex |> TelemeteryPortError |> monitor.Post},
+            token)
+
 
 type DroneConnection = 
     abstract Cmds:Agent<Command>
     abstract Emergency:Agent<Command>
-    abstract Telemtery:IObservable<Telemetery>
+    abstract Telemtery:IObservable<Telemetry>
