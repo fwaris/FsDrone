@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
-Project("{4925A630-B079-445d-BCD4-3A9C94FE9307}") = "FsDroneIOS", "FsDroneIOS\FsDroneIOS.fsproj", "{48683361-B713-4DAA-B071-A79FB4225957}"
+Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "FsDroneIOS", "FsDroneIOS\FsDroneIOS.fsproj", "{48683361-B713-4DAA-B071-A79FB4225957}"
 EndProject
-Project("{4925A630-B079-445d-BCD4-3A9C94FE9307}") = "FsDrone", "FsDrone\FsDrone.fsproj", "{0016DC27-BA5C-43F6-8BCB-624DC35F7736}"
+Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "FsDrone", "FsDrone\FsDrone.fsproj", "{0016DC27-BA5C-43F6-8BCB-624DC35F7736}"
+EndProject
+Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "FsDroneBase", "FsDroneBase\FsDroneBase.fsproj", "B5839475-7FEA-4AF1-9E78-07A18E8BC7B8"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,30 @@ Global
 		{48683361-B713-4DAA-B071-A79FB4225957}.Release|iPhone.Build.0 = Release|iPhone
 		{48683361-B713-4DAA-B071-A79FB4225957}.Release|iPhoneSimulator.ActiveCfg = Release|iPhoneSimulator
 		{48683361-B713-4DAA-B071-A79FB4225957}.Release|iPhoneSimulator.Build.0 = Release|iPhoneSimulator
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Ad-Hoc|iPhone.ActiveCfg = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Ad-Hoc|iPhone.Build.0 = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.AppStore|iPhone.ActiveCfg = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.AppStore|iPhone.Build.0 = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Debug|iPhone.ActiveCfg = Debug|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Debug|iPhone.Build.0 = Debug|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Debug|iPhoneSimulator.ActiveCfg = Debug|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Debug|iPhoneSimulator.Build.0 = Debug|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Release|iPhone.ActiveCfg = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Release|iPhone.Build.0 = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Release|iPhoneSimulator.ActiveCfg = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Release|iPhoneSimulator.Build.0 = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Ad-Hoc|iPhone.ActiveCfg = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Ad-Hoc|iPhone.Build.0 = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.AppStore|iPhone.ActiveCfg = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.AppStore|iPhone.Build.0 = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Debug|iPhone.ActiveCfg = Debug|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Debug|iPhone.Build.0 = Debug|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Debug|iPhoneSimulator.ActiveCfg = Debug|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Debug|iPhoneSimulator.Build.0 = Debug|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Release|iPhone.ActiveCfg = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Release|iPhone.Build.0 = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Release|iPhoneSimulator.ActiveCfg = Release|Any CPU
+		{B5839475-7FEA-4AF1-9E78-07A18E8BC7B8}.Release|iPhoneSimulator.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(MonoDevelopProperties) = preSolution
 		StartupItem = FsDroneIOS\FsDroneIOS.fsproj

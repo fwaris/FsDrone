@@ -44,12 +44,23 @@
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.1\Framework\v4.0\Microsoft.FSharp.Targets" />
   <ItemGroup>
-    <Compile Include="Extensions.fs" />
-    <Compile Include="IOUtils.fs">
+    <Compile Include="..\FsDroneBase\Extensions.fs">
+      <Link>Extensions.fs</Link>
     </Compile>
-    <Compile Include="Commands.fs" />
-    <Compile Include="NativeNavData.fs" />
-    <Compile Include="Telemetery.fs" />
-    <Compile Include="Drone.fs" />
+    <Compile Include="..\FsDroneBase\IOUtils.fs">
+      <Link>IOUtils.fs</Link>
+    </Compile>
+    <Compile Include="..\FsDroneBase\Commands.fs">
+      <Link>Commands.fs</Link>
+    </Compile>
+    <Compile Include="..\FsDroneBase\NativeNavData.fs">
+      <Link>NativeNavData.fs</Link>
+    </Compile>
+    <Compile Include="..\FsDroneBase\Telemetery.fs">
+      <Link>Telemetery.fs</Link>
+    </Compile>
+    <Compile Include="..\FsDroneBase\Drone.fs">
+      <Link>Drone.fs</Link>
+    </Compile>
   </ItemGroup>
 </Project>
