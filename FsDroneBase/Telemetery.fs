@@ -7,16 +7,17 @@ open System
 open System.Runtime.InteropServices
 open System.IO
 open Extensions
+open NativeNavData
 
 //flying substate (minor state)
 type Fs = 
-    | Ok
-    | LostAlt
-    | LostAlt_GoDown
-    | Alt_OutZone
-    | CombinedYaw
-    | Brake
-    | NoVision
+    | Ok                = 0us
+    | LostAlt           = 1us
+    | LostAlt_GoDown    = 2us
+    | Alt_OutZone       = 3us
+    | CombinedYaw       = 4us
+    | Brake             = 5us
+    | NoVision          = 6us
 
 //controls state: major states
 type Cs =
@@ -30,10 +31,10 @@ type Cs =
     | GoingToFix
     | Landing
     | Looping
- 
-type  Velocity      = {Vx:float; Vy:float; Vz:float}
-type  RPY           = {Roll:float; Pitch:float; Yaw:float}
-type  FlightSummary = {Velocity:Velocity; RPY:RPY; Altidute:float; BatteryLevel:float}
+
+type  Velocity      = {Vx:float32; Vy:float32; Vz:float32}
+type  RPY           = {Roll:float32; Pitch:float32; Yaw:float32}
+type  FlightSummary = {Velocity:Velocity; RPY:RPY; Altitude:float; BatteryLevel:float}
 type  Magneto       = {Mx:int; My:int; Mz:int}
 
 type  GPS  = 
@@ -51,7 +52,7 @@ type  GPS  =
         Accuracy_Time  : float32
     }
 
-type Errors = MessageSeq | Parse 
+type Errors = MessageSeq | Parse | UnhandledOption of NavdataOption
 
 type Telemetry =
     | State         of Cs
@@ -166,33 +167,96 @@ typedef struct _navdata_gps_t {
 
 module Parsing =
     open DataStructures
-    open NativeNavData
     open IOUtils
     let magic_no1 = 0x55667788u
     let magic_no2 = 0x55667789u
 
-    let inline processTelemeteryData (rdr:BinaryReader) bytesRead fPost =
-        let hdr = rdr.ReadUInt32()
-        if hdr <> magic_no1 || hdr <> magic_no2 then 
-            log "magic not matched"
-            fPost (Error Parse)
-            None
-        else
-            let droneState = rdr.ReadUInt32()
-            let seqNo      = rdr.ReadUInt32()
-            let visionFlag = rdr.ReadInt32()
-            //
-            let mutable currentNavOption = NavdataOption.Uknown
-            while currentNavOption <> NavdataOption.Checksum do
+    [<Literal>]
+    let CSFlyState = 3us
+    let csMap = 
+        [
+            0us, Default
+            1us, Init
+            2us, Landed
+            3us, Flying Fs.Ok
+            4us, Hovering
+            5us, Test
+            6us, TakingOff
+            7us, GoingToFix
+            8us, Landing
+            9us, Looping
+        ] |> Map.ofList
+ 
+
+    let inline calcChecksum (buf:byte[]) position = 
+        let mutable s = 0u
+        for i in 0 .. position do  s <- s + Operators.uint32 buf.[i]
+        s
+
+    let inline demoOption (rdr:BinaryReader) length =
+        let flyState     = rdr.ReadUInt16()
+        let controlState = rdr.ReadUInt16()
+        let batteryLevel = rdr.ReadUInt32()
+        let pitch = rdr.ReadSingle()
+        let roll  = rdr.ReadSingle()
+        let yaw   = rdr.ReadSingle()
+        let alt = rdr.ReadInt32()
+        let vx = rdr.ReadSingle()
+        let vy = rdr.ReadSingle()
+        let vz = rdr.ReadSingle()
+        let frameIdx = rdr.ReadUInt32()
+        rdr.BaseStream.Skip (rdr.BaseStream.Position - int64 length) //skip rest of the navdata option
+        [
+            (State 
+                        (match controlState with 
+                        | CSFlyState -> Flying (LanguagePrimitives.EnumOfValue flyState) 
+                        | x -> csMap.[x]))
+            (FlightSummary 
+                {
+                    Velocity        = {Vx=vx; Vy=vy; Vz=vz}
+                    RPY             = {Roll=roll; Pitch=pitch; Yaw=yaw}
+                    BatteryLevel    = float batteryLevel
+                    Altitude        = float alt
+                })
+        ]
+
+    let inline mapOption (rdr:BinaryReader) length = function
+        | NavdataOption.Demo -> demoOption rdr length
+        | NavdataOption.GPS  -> processGPSOption rdr length
+        | o -> [(Error (UnhandledOption o))]
+
+    let inline processOptions (rdr:BinaryReader) buf fPost =
+        let rec loop len = function
+            | NavdataOption.Checksum -> 
+                let expectedSum = calcChecksum buf (int rdr.BaseStream.Position - 4)
+                let cks = rdr.ReadUInt32()
+                if cks <> expectedSum then 
+                    failwith "invalid checksum"
+            | opt -> 
+                mapOption rdr optionSz fPost opt
                 let optionTag = rdr.ReadUInt16()
                 let optionSz  = rdr.ReadUInt16()
-                currentNavOption <- LanguagePrimitives.EnumOfValue optionTag
-                match currentNavOption with
-                | NavdataOption.Checksum -> checkSum ()
-                | _ -> 
-                    let telemetryMessage = parse rdr currentNavOption
-                    fPost telemetryMessage
-            //
-            Some seqNo
+
+        let mutable currentNavOption = NavdataOption.Uknown
+        while currentNavOption <> NavdataOption.Checksum do
+            currentNavOption <- LanguagePrimitives.EnumOfValue optionTag
+
+    let inline processTelemeteryData (buff:ReadBuffer) prevSeqNum fPost =
+        let rdr = buff.Reader
+        let hdr = rdr.ReadUInt32()
+        if hdr <> magic_no1 then 
+            log "magic not matched"
+            fPost (Error Parse)
+            prevSeqNum
+        else
+            let droneState = rdr.ReadUInt32()
+            let seqNum     = rdr.ReadUInt32()
+            let visionFlag = rdr.ReadInt32()
+            if seqNum <= prevSeqNum then 
+                fPost (Error MessageSeq)
+                seqNum
+            else
+                processOptions rdr buff.ByteArray fPost
+                seqNum
 
  

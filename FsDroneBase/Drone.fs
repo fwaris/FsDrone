@@ -43,18 +43,18 @@ module Controller =
             token)
 
     let startReceiver 
-        token (skt:Socket) endpoint fParser
+        token (skt:Socket) endpoint fTelemetryProcessor
         (monitor:Agent<MonitorMsg>) (receiver:Agent<Telemetry>) =
         //
         let buffer = ReadBuffer(4096)
+        let seqNum = ref 0
         Async.Start (
             async {
                 while true do 
                     try
                         buffer.Reset()
                         let! read = skt.AsyncReceiveFrom(buffer.ByteArray,endpoint)
-                        let msg = fParser buffer.Reader read
-                        receiver.Post msg
+                        seqNum := fTelemetryProcessor buffer !seqNum receiver.Post
                     with ex ->
                         logEx ex
                         ex |> TelemeteryPortError |> monitor.Post},
