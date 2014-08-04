@@ -31,23 +31,6 @@
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>bin\Release\FsDroneBase.XML</DocumentationFile>
   </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-    <Reference Include="FSharp.Core, Version=4.3.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Extensions.fs" />
-    <Compile Include="IOUtils.fs" />
-    <Compile Include="Commands.fs" />
-    <Compile Include="NativeNavData.fs" />
-    <Compile Include="Telemetery.fs" />
-    <Compile Include="Drone.fs" />
-  </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
   </PropertyGroup>
@@ -64,6 +47,25 @@
     </Otherwise>
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
+  <ItemGroup>
+    <Compile Include="Extensions.fs" />
+    <Compile Include="IOUtils.fs" />
+    <Compile Include="Commands.fs" />
+    <Compile Include="NativeNavData.fs" />
+    <Compile Include="Telemetry.fs" />
+    <Compile Include="NavdataParsing.fs" />
+    <Compile Include="DroneConnection.fs" />
+    <Compile Include="DroneController.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="FSharp.Core, Version=4.3.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <Private>True</Private>
+    </Reference>
+  </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
