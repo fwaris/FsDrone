@@ -19,7 +19,7 @@ module private Services =
 
     open FsDrone.CommandUtils
 
-    let createSender token (skt:Socket) endpoint (monitor:Agent<MonitorMsg>) =
+    let createSender token (skt:Socket) endpoint fMonitor =
         let seqNum = ref 0
         let buffer = new WriteBuffer(1000)
         Agent.Start(
@@ -34,7 +34,7 @@ module private Services =
                         skt.SendTo(buffer.ByteArray,buffer.Length, SocketFlags.None, endpoint) |> ignore
                     with ex -> 
                         logEx ex
-                        ex |> CommandPortError |> monitor.Post
+                        ex |> CommandPortError |> fMonitor
             }),
             token)
 
@@ -47,7 +47,7 @@ module private Services =
                 while true do 
                     try
                         buffer.Reset()
-                        let! read = skt.AsyncReceiveFrom(buffer.ByteArray,endpoint)
+                        let! read = skt.AsycReceive(buffer.ByteArray)
                         buffer.PrepareForRead read
                         seqNum := fTelemetryProcessor fError buffer !seqNum 
                     with ex ->
@@ -56,12 +56,12 @@ module private Services =
             token)
 
 
-type DroneConnection(monitorAgent:Agent<MonitorMsg>) = 
+type DroneConnection(fMonitor) = 
     let droneAddr = IPAddress.Parse(Services.droneHost)
     let rcvEndpt:EndPoint ref = ref (IPEndPoint(droneAddr,Services.telemetryPort) :> EndPoint)
     let sndEndpt = IPEndPoint(droneAddr,Services.commandPort)
-    let sndSocket = new Socket(SocketType.Dgram, ProtocolType.Udp)
-    let rcvSocket = new Socket(SocketType.Stream,ProtocolType.Tcp)
+    let sndSocket = new Socket(AddressFamily.InterNetwork,SocketType.Dgram, ProtocolType.Udp)
+    let rcvSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream,ProtocolType.Tcp)
 
     let connect() =
         try
@@ -70,7 +70,7 @@ type DroneConnection(monitorAgent:Agent<MonitorMsg>) =
             logEx ex
             sndSocket.Dispose()
             rcvSocket.Dispose()
-            monitorAgent.Post(ConnectionError ex)
+            fMonitor(ConnectionError ex)
             raise ex
 
     do connect()
@@ -78,7 +78,7 @@ type DroneConnection(monitorAgent:Agent<MonitorMsg>) =
     let cts = new System.Threading.CancellationTokenSource()
     let telemetryObserver,fPost = Observable.createObservableAgent<Telemetry> cts.Token
     let fTelemetry = Parsing.processTelemeteryData fPost
-    let sender   = Services.createSender cts.Token sndSocket sndEndpt monitorAgent
+    let sender   = Services.createSender cts.Token sndSocket sndEndpt fMonitor
     let receiver = Services.startReceiver cts.Token rcvSocket rcvEndpt fTelemetry
 
     member x.Telemetry = telemetryObserver
@@ -86,9 +86,12 @@ type DroneConnection(monitorAgent:Agent<MonitorMsg>) =
 
     interface IDisposable with 
         member x.Dispose() = 
-            cts.Cancel()
-            sndSocket.Close(); sndSocket.Dispose()
-            rcvSocket.Close(); rcvSocket.Dispose()
+            try
+                cts.Cancel()
+                sndSocket.Close(); sndSocket.Dispose()
+                rcvSocket.Close(); rcvSocket.Dispose()
+            with ex ->
+                logEx ex
 
 
 

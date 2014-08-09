@@ -70,4 +70,5 @@ type MonitorMsg =
     | TelemeteryPortError   of RecieveErrors
     | VideoPortError        of Exception
     | ControlPortError      of Exception
+    | ConnectionState       of string
 

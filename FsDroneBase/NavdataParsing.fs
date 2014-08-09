@@ -1,4 +1,5 @@
 ﻿namespace FsDrone
+open FsDrone
 open IOUtils
 open System.IO
 open System

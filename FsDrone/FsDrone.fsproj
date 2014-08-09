@@ -56,11 +56,17 @@
     <Compile Include="..\FsDroneBase\NativeNavData.fs">
       <Link>NativeNavData.fs</Link>
     </Compile>
-    <Compile Include="..\FsDroneBase\Telemetery.fs">
-      <Link>Telemetery.fs</Link>
+    <Compile Include="..\FsDroneBase\Telemetry.fs">
+      <Link>Telemetry.fs</Link>
     </Compile>
-    <Compile Include="..\FsDroneBase\Drone.fs">
-      <Link>Drone.fs</Link>
+    <Compile Include="..\FsDroneBase\NavdataParsing.fs">
+      <Link>NavdataParsing.fs</Link>
+    </Compile>
+    <Compile Include="..\FsDroneBase\DroneConnection.fs">
+      <Link>DroneConnection.fs</Link>
+    </Compile>
+    <Compile Include="..\FsDroneBase\DroneController.fs">
+      <Link>DroneController.fs</Link>
     </Compile>
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\Xamarin\iOS\Xamarin.MonoTouch.CSharp.targets" />

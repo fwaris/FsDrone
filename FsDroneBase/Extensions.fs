@@ -18,7 +18,10 @@ type Socket with
         let fEnd   = fun ar -> x.EndReceiveFrom(ar,endpoint)
         Async.FromBeginEnd(buffer, endpoint, fBegin, fEnd)
 
-    member x.AsycReceive(buffer:byte array)  = Async.FromBeginEnd(x.beginr,x.EndReceive)
+    member x.AsycReceive(buffer:byte array)  = 
+        let fBegin = fun (ba,cb,st) -> x.BeginReceive(ba,0,ba.Length,SocketFlags.None,cb,st)
+        let fEnd   = fun ar -> x.EndReceive(ar)
+        Async.FromBeginEnd(buffer, fBegin, fEnd)
 
 type System.IO.Stream with
     member x.Skip n = x.Position <- x.Position + n
