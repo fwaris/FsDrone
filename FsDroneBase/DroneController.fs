@@ -45,7 +45,7 @@ module private ControllerServices =
             async {
                 let! newScr = inbox.TryReceive(30)
                 match fConnection() with
-                | Disconnected | Connecting _ -> fMonitor errorNoConnection; return! loop None
+                | Disconnected | Connecting _ -> return! loop None
                 | Connected cnn ->
                     let scr = if newScr.IsSome then newScr else prevScr //new script overrides previous
                     let fPost = cnn.Cmds.Post
@@ -76,16 +76,13 @@ type DroneController() =
 
     let monitorObservable,fMonitor = Observable.createObservableAgent(cts.Token)
 
-    let connectAsync() = 
+    let connectAsync (cts:CancellationTokenSource) = 
         async {
             if cts.IsCancellationRequested then failwith "Controller is disposed - please re-instantiate"
             match connection with 
             | Disconnected ->
-                let cts = new CancellationTokenSource()
                 connection <- Connecting cts
-                fMonitor (ConnectionState ConnectionState.Connecting)
-                Async.StartWithContinuations(
-                    (ControllerServices.tryConnectAsync fMonitor,
+                let! conn = ControllerServices.tryConnectAsync fMonitor
                 do setConnection conn
                 fMonitor (ConnectionState (ConnectionState.Connected conn.Telemetry ))
                 return conn.Telemetry
@@ -105,7 +102,7 @@ type DroneController() =
 
     let scriptAgent = Agent.Start(fScriptRunner, cts.Token)
 
-    member x.ConnectAsync() = connect()
+    member x.ConnectAsync (cts:CancellationTokenSource) = connectAsync cts
     member x.Disconnect()   = disconnect()
     member x.Emergency()    = match connection with Connected c -> c.Cmds.Post Emergency | _ -> ()
     member x.Run script     = scriptAgent.Post script

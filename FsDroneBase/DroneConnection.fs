@@ -39,7 +39,7 @@ module private ConnectionServices =
             }),
             token)
 
-    let startReceiver token (skt:Socket) endpoint fTelemetryProcessor fError =
+    let startReceiver token (skt:Socket) fTelemetryProcessor fError =
         //
         let buffer = ReadBuffer(4096)
         let seqNum = ref 0u
@@ -55,18 +55,33 @@ module private ConnectionServices =
                         logEx ex
                         fError (UnhandledException ex) },
             token)
+        Async.Start (
+            async {
+                while true do
+                    do! Async.Sleep 200
+                    skt.Send([|0uy|]) |> ignore
+            }, token)
 
 
 type DroneConnection(fMonitor) = 
     let droneAddr = IPAddress.Parse(ConnectionServices.droneHost)
     let rcvEndpt:EndPoint ref = ref (IPEndPoint(droneAddr,ConnectionServices.telemetryPort) :> EndPoint)
     let sndEndpt = IPEndPoint(droneAddr,ConnectionServices.commandPort)
+    let cfgEndpt = IPEndPoint(droneAddr,ConnectionServices.controlPort)
+
     let sndSocket = new Socket(AddressFamily.InterNetwork,SocketType.Dgram, ProtocolType.Udp)
-    let rcvSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream,ProtocolType.Tcp)
+    let rcvSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram,ProtocolType.Udp)
+    //let cfgSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream,ProtocolType.Tcp)
 
     let connect() =
         try
+            sndSocket.Bind(IPEndPoint(IPAddress.Any,ConnectionServices.commandPort))
+            sndSocket.Connect(sndEndpt)
+            sndSocket.Send([|1uy|]) |> ignore
+            rcvSocket.Bind(IPEndPoint(IPAddress.Any,ConnectionServices.telemetryPort))
             rcvSocket.Connect(!rcvEndpt)
+            sndSocket.Send([|1uy|]) |> ignore
+           // cfgSocket.Connect(cfgEndpt)
         with ex ->
             logEx ex
             sndSocket.Dispose()
@@ -80,7 +95,8 @@ type DroneConnection(fMonitor) =
     let telemetryObserver,fPost = Observable.createObservableAgent<Telemetry> cts.Token
     let fTelemetry = Parsing.processTelemeteryData fPost
     let sender   = ConnectionServices.createSender cts.Token sndSocket sndEndpt fMonitor
-    let receiver = ConnectionServices.startReceiver cts.Token rcvSocket rcvEndpt fTelemetry
+    let fRecvError = fMonitor<<TelemeteryPortError 
+    let receiver = ConnectionServices.startReceiver cts.Token rcvSocket fTelemetry fRecvError
 
     member x.Telemetry = telemetryObserver
     member x.Cmds = sender
