@@ -1,4 +1,4 @@
-﻿module NativeNavData
+﻿namespace FsDrone
 
 type NavdataOption =
   | Demo          = 0us

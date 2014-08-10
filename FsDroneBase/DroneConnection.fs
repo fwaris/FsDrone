@@ -8,8 +8,9 @@ open System.Net
 open System.Text
 open System.IO
 open IOUtils
+open FsDrone
 
-module private Services =
+module private ConnectionServices =
 
     let droneHost     = "192.168.1.1"
     let controlPort   = 5559
@@ -30,7 +31,7 @@ module private Services =
                         let! msg = inbox.Receive()
                         seqNum := !seqNum + 1
                         buffer.Reset()
-                        let atCommand = toATCommand buffer.TextWriter !seqNum msg
+                        toATCommand buffer.TextWriter !seqNum msg
                         skt.SendTo(buffer.ByteArray,buffer.Length, SocketFlags.None, endpoint) |> ignore
                     with ex -> 
                         logEx ex
@@ -57,9 +58,9 @@ module private Services =
 
 
 type DroneConnection(fMonitor) = 
-    let droneAddr = IPAddress.Parse(Services.droneHost)
-    let rcvEndpt:EndPoint ref = ref (IPEndPoint(droneAddr,Services.telemetryPort) :> EndPoint)
-    let sndEndpt = IPEndPoint(droneAddr,Services.commandPort)
+    let droneAddr = IPAddress.Parse(ConnectionServices.droneHost)
+    let rcvEndpt:EndPoint ref = ref (IPEndPoint(droneAddr,ConnectionServices.telemetryPort) :> EndPoint)
+    let sndEndpt = IPEndPoint(droneAddr,ConnectionServices.commandPort)
     let sndSocket = new Socket(AddressFamily.InterNetwork,SocketType.Dgram, ProtocolType.Udp)
     let rcvSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream,ProtocolType.Tcp)
 
@@ -78,8 +79,8 @@ type DroneConnection(fMonitor) =
     let cts = new System.Threading.CancellationTokenSource()
     let telemetryObserver,fPost = Observable.createObservableAgent<Telemetry> cts.Token
     let fTelemetry = Parsing.processTelemeteryData fPost
-    let sender   = Services.createSender cts.Token sndSocket sndEndpt fMonitor
-    let receiver = Services.startReceiver cts.Token rcvSocket rcvEndpt fTelemetry
+    let sender   = ConnectionServices.createSender cts.Token sndSocket sndEndpt fMonitor
+    let receiver = ConnectionServices.startReceiver cts.Token rcvSocket rcvEndpt fTelemetry
 
     member x.Telemetry = telemetryObserver
     member x.Cmds = sender
@@ -92,7 +93,3 @@ type DroneConnection(fMonitor) =
                 rcvSocket.Close(); rcvSocket.Dispose()
             with ex ->
                 logEx ex
-
-
-
-

@@ -3,7 +3,6 @@ open FsDrone
 open IOUtils
 open System.IO
 open System
-open NativeNavData
 open Extensions
 
 module Parsing =
@@ -18,7 +17,7 @@ module Parsing =
                 0us, Default
                 1us, Init
                 2us, Landed
-                3us, Flying Fs.Ok
+                3us, Flying FlyingState.Ok
                 4us, Hovering
                 5us, Test
                 6us, TakingOff

@@ -4,10 +4,10 @@ open System
 open System.Runtime.InteropServices
 open System.IO
 open Extensions
-open NativeNavData
+open FsDrone
 
 //flying substate (minor state)
-type Fs = 
+type FlyingState = 
     | Ok                = 0us
     | LostAlt           = 1us
     | LostAlt_GoDown    = 2us
@@ -17,11 +17,11 @@ type Fs =
     | NoVision          = 6us
 
 //controls state: major states
-type Cs =
+type DroneState =
     | Default
     | Init
     | Landed
-    | Flying of Fs
+    | Flying of FlyingState
     | Hovering
     | Test
     | TakingOff
@@ -59,16 +59,19 @@ type  GPS  =
 type RecieveErrors = MessageSeq | Parse | TooFewBytes | Checksum | UnhandledOption of NavdataOption | UnhandledException of Exception
 
 type Telemetry =
-    | State         of Cs
+    | State         of DroneState
     | FlightSummary of FlightSummary
     | Magneto       of Magneto
     | GPS           of GPS
 
+
+type ConnectionState = Connected of IObservable<Telemetry> | Disconnected | Connecting
 type MonitorMsg =
     | ConnectionError       of Exception
     | CommandPortError      of Exception
     | TelemeteryPortError   of RecieveErrors
     | VideoPortError        of Exception
     | ControlPortError      of Exception
-    | ConnectionState       of string
+    | ConnectionState       of ConnectionState
+    | ScriptError           of string
 
