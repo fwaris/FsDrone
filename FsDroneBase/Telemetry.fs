@@ -56,20 +56,24 @@ type  GPS  =
         SatChannels    : Sat list
     }
 
-type RecieveErrors = MessageSeq | Parse | TooFewBytes | Checksum | UnhandledOption of NavdataOption | UnhandledException of Exception
-
 type Telemetry =
     | State         of DroneState
     | FlightSummary of FlightSummary
     | Magneto       of Magneto
     | GPS           of GPS
 
-
 type ConnectionState = Connected of IObservable<Telemetry> | Disconnected | Connecting
+
+type TelemetryPortErrors = 
+    | MessageSeq | Parse | TooFewBytes | Checksum 
+    | UnhandledOption   of NavdataOption 
+    | ReceiveError      of Exception
+    | KeepAliveError    of Exception
+
 type MonitorMsg =
     | ConnectionError       of Exception
     | CommandPortError      of Exception
-    | TelemeteryPortError   of RecieveErrors
+    | TelemeteryPortError   of TelemetryPortErrors
     | VideoPortError        of Exception
     | ControlPortError      of Exception
     | ConnectionState       of ConnectionState

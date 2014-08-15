@@ -35,32 +35,42 @@ module private ConnectionServices =
                         skt.SendTo(buffer.ByteArray,buffer.Length, SocketFlags.None, endpoint) |> ignore
                     with ex -> 
                         logEx ex
-                        ex |> CommandPortError |> fMonitor
+                        fMonitor (CommandPortError ex)
             }),
             token)
+    
+    let inline telemetryReceiveLoop seqNum (skt:Socket) (buffer:ReadBuffer) fTelemetryProcessor fError =
+        async {
+            while true do 
+                try
+                    buffer.Reset()
+                    let! read = skt.AsycReceive(buffer.ByteArray)
+                    buffer.PrepareForRead read
+                    printfn "Read %d" read
+                    printfn "%A" buffer.ByteArray
+                    seqNum := fTelemetryProcessor fError buffer !seqNum 
+                with ex ->
+                    logEx ex
+                    fError (ReceiveError ex)
+            }
 
-    let startReceiver token (skt:Socket) fTelemetryProcessor fError =
-        //
-        let buffer = ReadBuffer(4096)
-        let seqNum = ref 0u
-        Async.Start (
-            async {
-                while true do 
-                    try
-                        buffer.Reset()
-                        let! read = skt.AsycReceive(buffer.ByteArray)
-                        buffer.PrepareForRead read
-                        seqNum := fTelemetryProcessor fError buffer !seqNum 
-                    with ex ->
-                        logEx ex
-                        fError (UnhandledException ex) },
-            token)
-        Async.Start (
-            async {
-                while true do
+    let inline telemtryPortKeepAliveLoop (skt:Socket) fError =
+        async {
+            while true do
+                try
                     do! Async.Sleep 200
                     skt.Send([|0uy|]) |> ignore
-            }, token)
+                with ex -> 
+                    fError (KeepAliveError ex)
+            }
+
+    let startReceiver token (skt:Socket) fTelemetryProcessor fError =
+        let buffer = ReadBuffer(4096)
+        let seqNum = ref 0u
+        let receiveLoop = telemetryReceiveLoop seqNum skt buffer fTelemetryProcessor fError
+        Async.Start (receiveLoop, token)
+        Async.Start (telemtryPortKeepAliveLoop skt fError, token)
+
 
 
 type DroneConnection(fMonitor) = 
@@ -71,7 +81,7 @@ type DroneConnection(fMonitor) =
 
     let sndSocket = new Socket(AddressFamily.InterNetwork,SocketType.Dgram, ProtocolType.Udp)
     let rcvSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram,ProtocolType.Udp)
-    //let cfgSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream,ProtocolType.Tcp)
+    let cfgSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream,ProtocolType.Tcp)
 
     let connect() =
         try
@@ -80,12 +90,12 @@ type DroneConnection(fMonitor) =
             sndSocket.Send([|1uy|]) |> ignore
             rcvSocket.Bind(IPEndPoint(IPAddress.Any,ConnectionServices.telemetryPort))
             rcvSocket.Connect(!rcvEndpt)
-            sndSocket.Send([|1uy|]) |> ignore
-           // cfgSocket.Connect(cfgEndpt)
+            cfgSocket.Connect(cfgEndpt)
         with ex ->
             logEx ex
             sndSocket.Dispose()
             rcvSocket.Dispose()
+            cfgSocket.Dispose()
             fMonitor(ConnectionError ex)
             raise ex
 
