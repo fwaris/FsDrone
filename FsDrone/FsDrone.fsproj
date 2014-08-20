@@ -62,6 +62,7 @@
     <Compile Include="..\FsDroneBase\NavdataParsing.fs">
       <Link>NavdataParsing.fs</Link>
     </Compile>
+    <Compile Include="Configuration.fs" />
     <Compile Include="..\FsDroneBase\DroneConnection.fs">
       <Link>DroneConnection.fs</Link>
     </Compile>

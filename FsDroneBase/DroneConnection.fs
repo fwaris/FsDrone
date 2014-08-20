@@ -20,6 +20,7 @@ module private ConnectionServices =
 
     open FsDrone.CommandUtils
 
+
     let createSender token (skt:Socket) endpoint fMonitor =
         let seqNum = ref 0
         let buffer = new WriteBuffer(1000)
@@ -72,8 +73,17 @@ module private ConnectionServices =
         Async.Start (telemtryPortKeepAliveLoop skt fError, token)
 
 
+    let configLoop str fMonitor fConfiguration =
+        async {
+            while true do
+                try
+                    Configuration.scanConfig str fConfiguration
+                with ex -> 
+                    ex |> ConfigError |> ConfigPortError |> fMonitor
+        }
 
-type DroneConnection(fMonitor) = 
+
+type DroneConnection(fMonitor, fTelemetry, fConfiguration) = 
     let droneAddr = IPAddress.Parse(ConnectionServices.droneHost)
     let rcvEndpt:EndPoint ref = ref (IPEndPoint(droneAddr,ConnectionServices.telemetryPort) :> EndPoint)
     let sndEndpt = IPEndPoint(droneAddr,ConnectionServices.commandPort)
@@ -81,7 +91,7 @@ type DroneConnection(fMonitor) =
 
     let sndSocket = new Socket(AddressFamily.InterNetwork,SocketType.Dgram, ProtocolType.Udp)
     let rcvSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram,ProtocolType.Udp)
-    let cfgSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream,ProtocolType.Tcp)
+    let cfgClient = new TcpClient()
 
     let connect() =
         try
@@ -90,25 +100,24 @@ type DroneConnection(fMonitor) =
             sndSocket.Send([|1uy|]) |> ignore
             rcvSocket.Bind(IPEndPoint(IPAddress.Any,ConnectionServices.telemetryPort))
             rcvSocket.Connect(!rcvEndpt)
-            cfgSocket.Connect(cfgEndpt)
+            cfgClient.Connect(cfgEndpt)
         with ex ->
             logEx ex
             sndSocket.Dispose()
             rcvSocket.Dispose()
-            cfgSocket.Dispose()
+            cfgClient.Close(); (cfgClient :> IDisposable).Dispose()
             fMonitor(ConnectionError ex)
             raise ex
 
     do connect()
 
     let cts = new System.Threading.CancellationTokenSource()
-    let telemetryObserver,fPost = Observable.createObservableAgent<Telemetry> cts.Token
-    let fTelemetry = Parsing.processTelemeteryData fPost
+    let fTelemeteryProcessor = Parsing.processTelemeteryData fTelemetry
     let sender   = ConnectionServices.createSender cts.Token sndSocket sndEndpt fMonitor
     let fRecvError = fMonitor<<TelemeteryPortError 
-    let receiver = ConnectionServices.startReceiver cts.Token rcvSocket fTelemetry fRecvError
+    let receiver = ConnectionServices.startReceiver cts.Token rcvSocket fTelemeteryProcessor fRecvError
+    let configReader = new BinaryReader(cfgClient.GetStream())
 
-    member x.Telemetry = telemetryObserver
     member x.Cmds = sender
 
     interface IDisposable with 

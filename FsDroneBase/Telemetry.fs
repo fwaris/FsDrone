@@ -70,12 +70,16 @@ type TelemetryPortErrors =
     | ReceiveError      of Exception
     | KeepAliveError    of Exception
 
+type ConfigPortErrors = ConfigError of Exception
+
 type MonitorMsg =
     | ConnectionError       of Exception
     | CommandPortError      of Exception
     | TelemeteryPortError   of TelemetryPortErrors
+    | ConfigPortError       of ConfigPortErrors
     | VideoPortError        of Exception
     | ControlPortError      of Exception
     | ConnectionState       of ConnectionState
     | ScriptError           of string
 
+ type ConfigSetting = {Name:string; Value:string}
