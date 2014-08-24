@@ -71,3 +71,8 @@ module Observable =
                             lock subscribers (fun () -> 
                                 subscribers := subscribers.Value.Remove(key1)) } }
         obs,agent.Post
+
+    let till  (f:'T -> bool) (obs:IObservable<'T>) = 
+        let subs = ref Unchecked.defaultof<IDisposable>
+        subs := obs.Subscribe(fun x -> if f x then subs.Value.Dispose() else ())
+        ()

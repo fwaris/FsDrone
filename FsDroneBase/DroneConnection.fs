@@ -117,6 +117,7 @@ type DroneConnection(fMonitor, fTelemetry, fConfiguration) =
     let fRecvError = fMonitor<<TelemeteryPortError 
     let receiver = ConnectionServices.startReceiver cts.Token rcvSocket fTelemeteryProcessor fRecvError
     let configReader = new BinaryReader(cfgClient.GetStream())
+    do Async.Start(ConnectionServices.configLoop configReader fMonitor fConfiguration, cts.Token)
 
     member x.Cmds = sender
 

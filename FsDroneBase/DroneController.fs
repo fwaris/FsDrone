@@ -6,23 +6,33 @@ open System.Threading
 open System
 open FsDrone
 
-type private ControllerConnectionState = Disconnected | Connecting of CancellationTokenSource | Connected of DroneConnection
+type private ControllerConnectionState = 
+    | Disconnected 
+    | Connecting of CancellationTokenSource 
+    | Connected of DroneConnection
 
-type FDS = DroneState -> bool
+type FDS = DroneState       -> bool
+type FTM = Telemetry        -> bool
+type FCS = ConfigSetting    -> bool
+type TimeoutMS = int
+
+type StepResult<'T> = Continue of 'T| Done | Timeout
 
 type CommandScript = 
     | Single of Command
     | WhenRepeat of (FDS * Command * FDS) //if in start state, execute command till end state reached
     | Repeat of (Command * FDS)           //repeat till end state reached
+    | AwaitTelemetry of FTM * TimeoutMS
+    | AwaitConfig of FCS * TimeoutMS
     | Sequence of CommandScript list
 
 module private ControllerServices = 
 
-    let tryConnectAsync fMonitor =
+    let tryConnectAsync fMonitor fTelemetry fConfig =
         let rec loop() =
             async {
                 let dc = ref None
-                try dc := Some (new DroneConnection(fMonitor)) with ex -> logEx ex
+                try dc := Some (new DroneConnection(fMonitor,fTelemetry, fConfig)) with ex -> logEx ex
                 match !dc with 
                 | Some c -> return c
                 | None -> 
@@ -30,12 +40,21 @@ module private ControllerServices =
                     return! loop() }
         loop()
 
-    let inline singleStep fPost = function
-        | Single cmd, _                                 -> fPost cmd; None
-        | WhenRepeat (fds1,cmd,fds2), ds when (fds1 ds) -> fPost cmd; (Repeat(cmd,fds2) |> Some)
-        | WhenRepeat _, _                               -> None
-        | Repeat (_,fds), ds when (fds ds)              -> None
-        | Repeat (cmd,_) as scr, _                      -> fPost cmd; (Some scr)
+    let inline awaitTill ftm timeout token obs noTry =
+        let step = async {obs |> Observable.till ftm }
+        try 
+            Async.RunSynchronously(step,timeout,token) 
+        with ex -> 
+            if noTry then raise ex else ()
+        Done
+
+    let inline singleStep fPost telemetryObs configObs token = function
+        | Single cmd, _                                 -> fPost cmd; Done
+        | WhenRepeat (fds1,cmd,fds2), ds when (fds1 ds) -> fPost cmd; (Repeat(cmd,fds2) |> Continue
+        | WhenRepeat _, _                               -> Done
+        | Repeat (_,fds), ds when (fds ds)              -> Done
+        | Repeat (cmd,_) as scr, _                      -> fPost cmd; (Continue scr)
+        | AwaitTelemetry (ftm,timeout),_                  -> awaitTill ftm timeout telemetryObs token false
         | Sequence _, _                                 -> failwithf "sequence not expected"
 
     let errorNoConnection = ScriptError "No Connection for Script Command"
@@ -74,7 +93,9 @@ type DroneController() =
 
     let mutable droneState = DroneState.Default
 
-    let monitorObservable,fMonitor = Observable.createObservableAgent(cts.Token)
+    let monitorObservable , fMonitor    = Observable.createObservableAgent(cts.Token)
+    let telemtryObservable, fTelemetry  = Observable.createObservableAgent(cts.Token)
+    let configObservable  , fConfig     = Observable.createObservableAgent(cts.Token)
 
     let connectAsync (cts:CancellationTokenSource) = 
         async {
@@ -82,12 +103,11 @@ type DroneController() =
             match connection with 
             | Disconnected ->
                 connection <- Connecting cts
-                let! conn = ControllerServices.tryConnectAsync fMonitor
-                do setConnection conn
-                fMonitor (ConnectionState (ConnectionState.Connected conn.Telemetry ))
-                return conn.Telemetry
-            | Connecting  _ -> return failwith "Connection started on previous call - please disconnect first or wait for connection"
-            | Connected c -> return c.Telemetry
+                let! conn = ControllerServices.tryConnectAsync fMonitor fTelemetry fConfig
+                connection <- Connected conn
+                fMonitor (ConnectionState (ConnectionState.Connected conn.Cmds ))
+            | Connecting  _ -> return failwith "Connection in progress - please wait or disconnect"
+            | Connected c -> ()
         }
                 
     let disconnect() =
@@ -105,8 +125,10 @@ type DroneController() =
     member x.ConnectAsync (cts:CancellationTokenSource) = connectAsync cts
     member x.Disconnect()   = disconnect()
     member x.Emergency()    = match connection with Connected c -> c.Cmds.Post Emergency | _ -> ()
-    member x.Run script     = scriptAgent.Post script
     member x.Monitor        = monitorObservable
+    member x.Telemetry      = telemtryObservable
+    member x.ConfigObs      = configObservable
+    member x.Run script     = scriptAgent.Post script
 
     interface IDisposable with
         member x.Dispose() =

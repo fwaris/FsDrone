@@ -62,7 +62,7 @@ type Telemetry =
     | Magneto       of Magneto
     | GPS           of GPS
 
-type ConnectionState = Connected of IObservable<Telemetry> | Disconnected | Connecting
+type ConnectionState = Connected of Agent<Command> | Disconnected | Connecting
 
 type TelemetryPortErrors = 
     | MessageSeq | Parse | TooFewBytes | Checksum 
