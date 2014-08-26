@@ -26,6 +26,18 @@ type Socket with
 type System.IO.Stream with
     member x.Skip n = x.Position <- x.Position + n
 
+module Array =
+    /// scans the array backwards from startAt, 2 elements at a time
+    /// and evaluates the predicate function f
+    /// returns the index when f evalutes to true else -1
+    let reverseFind startAt f xs =
+        let mutable found = -1
+        let mutable idx = startAt
+        while idx >= 0 && found = -1 do
+            if f (xs,idx) then found <- idx
+            idx <- idx - 1
+        found
+            
 module Observable =
     let createObservableAgent<'T> (token:System.Threading.CancellationToken) =
         let finished = ref false

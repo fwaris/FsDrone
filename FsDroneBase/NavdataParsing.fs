@@ -35,10 +35,13 @@ module Parsing =
         let cn0 = rdr.ReadByte()
         {SatNum = sat; Cn0 = cn0}
 
-    let inline checkSum (buf:ReadBuffer) =
+    let checkSum (buf:ReadBuffer) =
         let xs = buf.ByteArray
-        let idx = Array.LastIndexOf(xs,NavdataOption.Checksum)
-        if idx < 0 then 
+        let len = buf.Length
+        let cks = uint16 NavdataOption.Checksum
+        let pred (xs,i) = BitConverter.ToUInt16(xs,i) = cks
+        let idx = Array.reverseFind (len-2) pred xs
+        if idx = -1 then
             false
         else
             let mutable calculatedSum = 0u
@@ -149,7 +152,7 @@ module Parsing =
 
     let headersize = 16
 
-    let inline processTelemeteryData fPost fError (buff:ReadBuffer) prevSeqNum   =
+    let processTelemeteryData fPost fError (buff:ReadBuffer) prevSeqNum   =
         let rdr = buff.Reader
         if buff.Length < headersize then 
             fError TooFewBytes //should have received atleast the header bits

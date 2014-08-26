@@ -3,6 +3,8 @@
 #load "Commands.fs"
 #load "NativeNavData.fs"
 #load "Telemetry.fs"
+#load "Configuration.fs"
 #load "NavdataParsing.fs"
 #load "DroneConnection.fs"
+#load "DroneScript.fs"
 #load "DroneController.fs"

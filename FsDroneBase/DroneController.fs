@@ -11,22 +11,11 @@ type private ControllerConnectionState =
     | Connecting of CancellationTokenSource 
     | Connected of DroneConnection
 
-type FDS = DroneState       -> bool
-type FTM = Telemetry        -> bool
-type FCS = ConfigSetting    -> bool
-type TimeoutMS = int
-
-type StepResult<'T> = Continue of 'T| Done | Timeout
-
-type CommandScript = 
-    | Single of Command
-    | WhenRepeat of (FDS * Command * FDS) //if in start state, execute command till end state reached
-    | Repeat of (Command * FDS)           //repeat till end state reached
-    | AwaitTelemetry of FTM * TimeoutMS
-    | AwaitConfig of FCS * TimeoutMS
-    | Sequence of CommandScript list
-
 module private ControllerServices = 
+
+    let applicationId = "fsdrone01"
+    let sessionId     = "fsdrone02"
+    let userId        = "fsdrone03"
 
     let tryConnectAsync fMonitor fTelemetry fConfig =
         let rec loop() =
@@ -40,49 +29,42 @@ module private ControllerServices =
                     return! loop() }
         loop()
 
-    let inline awaitTill ftm timeout token obs noTry =
-        let step = async {obs |> Observable.till ftm }
-        try 
-            Async.RunSynchronously(step,timeout,token) 
-        with ex -> 
-            if noTry then raise ex else ()
-        Done
-
-    let inline singleStep fPost telemetryObs configObs token = function
-        | Single cmd, _                                 -> fPost cmd; Done
-        | WhenRepeat (fds1,cmd,fds2), ds when (fds1 ds) -> fPost cmd; (Repeat(cmd,fds2) |> Continue
-        | WhenRepeat _, _                               -> Done
-        | Repeat (_,fds), ds when (fds ds)              -> Done
-        | Repeat (cmd,_) as scr, _                      -> fPost cmd; (Continue scr)
-        | AwaitTelemetry (ftm,timeout),_                  -> awaitTill ftm timeout telemetryObs token false
-        | Sequence _, _                                 -> failwithf "sequence not expected"
-
-    let errorNoConnection = ScriptError "No Connection for Script Command"
-
-    let scriptRunner fConnection fDroneState fMonitor (inbox:Agent<CommandScript>)=
-        let rec loop prevScr =
-            async {
-                let! newScr = inbox.TryReceive(30)
-                match fConnection() with
-                | Disconnected | Connecting _ -> return! loop None
-                | Connected cnn ->
-                    let scr = if newScr.IsSome then newScr else prevScr //new script overrides previous
-                    let fPost = cnn.Cmds.Post
-                    match scr, fDroneState() with
-                    | None, Flying _  | Some (Sequence []), Flying _ -> fPost Hover; return! loop None              
-                    | None, _         | Some (Sequence []), _        -> return! loop None
-                    | Some scr, ds ->
-                        match scr with
-                        | Sequence (scr::rest) ->
-                            match singleStep fPost (scr,ds) with
-                            | None     -> return! loop (Some (Sequence rest))
-                            | Some scr -> return! loop (Some (Sequence(scr::rest)))
-                        | scr -> 
-                            match singleStep fPost (scr,ds) with
-                            | None -> return! loop None
-                            | scr  -> return! loop scr
-            }
-        loop None
+    ///sends the Hover command if drone is flying and no commnad has recently been sent
+    let startHoverLoop fConnection fDroneState fMonitor =
+        async  {
+            try
+                while true do
+                    do! Async.Sleep 30000
+                    match fConnection(),fDroneState() with
+                    | Disconnected,_ | Connecting _ ,_ -> ()
+                    | Connected conn, Flying _ ->
+                        let ts = conn.LastCommandSent()
+                        let elapsed = (DateTime.Now - ts).TotalSeconds
+                        if elapsed > 1.0 then conn.Cmds.Post(Hover)
+                    | Connected _, _ -> ()
+            with ex ->
+                fMonitor (HoverLoopError ex)
+        }
+    
+    //
+    let scriptAgent fConnection fDroneState telemetryObs configObs fMonitor (inbox:Agent<Script>) =
+        async {
+            while true do
+                let! script = inbox.Receive()
+                try
+                    match fConnection() with
+                    | Connected conn -> 
+                        do! ScriptServices.executeScript 
+                                                        fDroneState 
+                                                        conn.Cmds.Post
+                                                        telemetryObs 
+                                                        configObs
+                                                        fMonitor 
+                                                        script
+                    | _ -> ()
+                with ex ->
+                    fMonitor (ScriptError (script.Name,"no connection"))
+        }
 
 type DroneController() = 
 
@@ -109,6 +91,9 @@ type DroneController() =
             | Connecting  _ -> return failwith "Connection in progress - please wait or disconnect"
             | Connected c -> ()
         }
+
+    let getConnection() = connection
+    let getDroneState() = droneState
                 
     let disconnect() =
         match connection with
@@ -118,9 +103,10 @@ type DroneController() =
         connection <- Disconnected
         fMonitor (ConnectionState ConnectionState.Disconnected)
 
-    let fScriptRunner = ControllerServices.scriptRunner  (fun()->connection) (fun()->droneState) fMonitor
+    do Async.Start(ControllerServices.startHoverLoop getConnection getDroneState fMonitor,cts.Token)
 
-    let scriptAgent = Agent.Start(fScriptRunner, cts.Token)
+    let fScriptRunner = ControllerServices.scriptAgent  getConnection getDroneState telemtryObservable configObservable fMonitor
+    let scriptAgent = Agent.Start(fScriptRunner,cts.Token)
 
     member x.ConnectAsync (cts:CancellationTokenSource) = connectAsync cts
     member x.Disconnect()   = disconnect()

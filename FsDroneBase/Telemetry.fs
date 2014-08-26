@@ -80,6 +80,7 @@ type MonitorMsg =
     | VideoPortError        of Exception
     | ControlPortError      of Exception
     | ConnectionState       of ConnectionState
-    | ScriptError           of string
+    | ScriptError           of string * string
+    | HoverLoopError        of Exception
 
  type ConfigSetting = {Name:string; Value:string}
