@@ -48,8 +48,8 @@ module private ConnectionServices =
                     buffer.Reset()
                     let! read = skt.AsyncReceiveFrom(buffer.ByteArray,endpoint)
                     buffer.PrepareForRead read
-                    printfn "Read %d" read
-                    printfn "%A" buffer.ByteArray
+//                    printfn "Read %d" read
+//                    printfn "%A" buffer.ByteArray
                     seqNum := fTelemetryProcessor fError buffer !seqNum 
                 with ex ->
                     logEx ex

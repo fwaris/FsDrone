@@ -73,7 +73,7 @@ type DroneController() =
     let mutable connection = Disconnected
     let setConnection conn = connection <- Connected conn
 
-    let mutable droneState = DroneState.Default
+    let mutable droneState = DroneNavState.Default
 
     let monitorObservable , fMonitor    = Observable.createObservableAgent(cts.Token)
     let telemtryObservable, fTelemetry  = Observable.createObservableAgent(cts.Token)

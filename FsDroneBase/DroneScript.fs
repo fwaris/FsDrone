@@ -5,7 +5,7 @@ open Extensions
 open System
 open FsDrone
 
-type FDS = DroneState       -> bool
+type FDS = DroneNavState    -> bool
 type FTM = Telemetry        -> bool
 type FCS = ConfigSetting    -> bool
 

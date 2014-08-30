@@ -17,7 +17,7 @@ type FlyingState =
     | NoVision          = 6us
 
 //controls state: major states
-type DroneState =
+type DroneNavState =
     | Default
     | Init
     | Landed
@@ -57,7 +57,8 @@ type  GPS  =
     }
 
 type Telemetry =
-    | State         of DroneState
+    | NavState      of DroneNavState
+    | DroneState    of ArdroneState
     | FlightSummary of FlightSummary
     | Magneto       of Magneto
     | GPS           of GPS

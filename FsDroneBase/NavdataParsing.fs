@@ -120,7 +120,7 @@ module Parsing =
         let frameIdx = rdr.ReadUInt32()
         rdr.BaseStream.Skip (int64 length - rdr.BaseStream.Position) //skip rest of the navdata option
         fPost
-            (State 
+            (NavState 
                 (match controlState with 
                 | CSFlyState -> Flying (LanguagePrimitives.EnumOfValue flyState) 
                 | x -> csArray.[int x]))
@@ -138,7 +138,7 @@ module Parsing =
         | NavdataOption.GPS  -> processGPSOption rdr length fPost
         | o -> fError (UnhandledOption o)
 
-    let inline processOptions (rdr:BinaryReader) fPost fError =
+    let processOptions (rdr:BinaryReader) fPost fError =
         let rec loop len = function
             | NavdataOption.Checksum -> ()
             | opt -> 
@@ -164,13 +164,14 @@ module Parsing =
                 fError Parse
                 prevSeqNum
             else
-                let droneState = rdr.ReadUInt32()
+                let droneState = enum<ArdroneState> (rdr.ReadInt32())
                 let seqNum     = rdr.ReadUInt32()
                 let visionFlag = rdr.ReadInt32()
                 if seqNum <= prevSeqNum then 
                     fError MessageSeq
                 else
                     if checkSum(buff) then
+                        fPost (DroneState droneState)
                         processOptions rdr fPost fError
                     else
                         fError Checksum
