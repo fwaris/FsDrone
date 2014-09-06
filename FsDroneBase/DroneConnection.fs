@@ -1,5 +1,5 @@
 ﻿//provides basic connectivity to the drone
-//including the ability to send commnads and receive telemetry data
+//including the ability to send commnads and receive telemetry and configuration data
 namespace FsDrone
 open Extensions
 open System
@@ -19,7 +19,6 @@ module private ConnectionServices =
     let telemetryPort = 5554 //navdata
 
     open FsDrone.CommandUtils
-
 
     let createSender token (skt:Socket) endpoint fMonitor fSetTimestamp =
         let seqNum = ref 0
@@ -88,9 +87,9 @@ module private ConnectionServices =
 
 type DroneConnection(fMonitor, fTelemetry, fConfiguration) = 
     let droneAddr = IPAddress.Parse(ConnectionServices.droneHost)
-    let rcvEndpt:EndPoint ref = ref (IPEndPoint(droneAddr,ConnectionServices.telemetryPort) :> EndPoint)
-    let sndEndpt = IPEndPoint(droneAddr,ConnectionServices.commandPort)
-    let cfgEndpt = IPEndPoint(droneAddr,ConnectionServices.controlPort)
+    let rcvEndpt  = ref (IPEndPoint(droneAddr,ConnectionServices.telemetryPort) :> EndPoint)
+    let sndEndpt  = IPEndPoint(droneAddr,ConnectionServices.commandPort)
+    let cfgEndpt  = IPEndPoint(droneAddr,ConnectionServices.controlPort)
 
     let sndSocket = new Socket(AddressFamily.InterNetwork,SocketType.Dgram, ProtocolType.Udp)
     let rcvSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram,ProtocolType.Udp)
@@ -99,10 +98,8 @@ type DroneConnection(fMonitor, fTelemetry, fConfiguration) =
     let connect() =
         try
             sndSocket.Bind(IPEndPoint(IPAddress.Any,ConnectionServices.commandPort))
-            //sndSocket.Connect(sndEndpt)
             sndSocket.SendTo([|1uy|],sndEndpt) |> ignore
             rcvSocket.Bind(IPEndPoint(IPAddress.Any,ConnectionServices.telemetryPort))
-            //rcvSocket.Connect(!rcvEndpt)
             cfgClient.Connect(cfgEndpt)
         with ex ->
             logEx ex
@@ -126,10 +123,16 @@ type DroneConnection(fMonitor, fTelemetry, fConfiguration) =
         DateTime.FromBinary(currentTics)
 
     let cts = new System.Threading.CancellationTokenSource()
+    //
+    // start telemetry agents
     let fTelemeteryProcessor = Parsing.processTelemeteryData fTelemetry
-    let sender   = ConnectionServices.createSender cts.Token sndSocket sndEndpt fMonitor setLastCommandSent
     let fRecvError = fMonitor<<TelemeteryPortError 
     let receiver = ConnectionServices.startReceiver cts.Token rcvSocket rcvEndpt fTelemeteryProcessor fRecvError
+    //
+    // start command sender agent
+    let sender = ConnectionServices.createSender cts.Token sndSocket sndEndpt fMonitor setLastCommandSent
+    //
+    // start config reader agent
     let configReader = new BinaryReader(cfgClient.GetStream())
     do Async.Start(ConnectionServices.configLoop cfgClient configReader fMonitor fConfiguration, cts.Token)
 

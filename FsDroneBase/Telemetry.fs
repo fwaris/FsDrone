@@ -85,3 +85,4 @@ type MonitorMsg =
     | HoverLoopError        of Exception
 
  type ConfigSetting = {Name:string; Value:string}
+

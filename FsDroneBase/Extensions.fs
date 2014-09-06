@@ -84,6 +84,16 @@ module Observable =
                                 subscribers := subscribers.Value.Remove(key1)) } }
         obs,agent.Post
 
+    let awaitAsync timeout (obs:IObservable<'t>) = 
+        let ev = (new System.Threading.ManualResetEvent(false))
+        let v = ref None
+        let r = obs.Subscribe(fun v' -> v := Some v'; ev.Set() |> ignore)
+        async {
+            let! a = Async.AwaitWaitHandle(ev,timeout)
+            ev.Dispose()
+            r.Dispose()
+            return !v }
+
     let till  (f:'T -> bool) (obs:IObservable<'T>) = 
         let subs = ref Unchecked.defaultof<IDisposable>
         subs := obs.Subscribe(fun x -> if f x then subs.Value.Dispose() else ())

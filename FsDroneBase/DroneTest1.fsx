@@ -10,14 +10,21 @@ let stop() = (cntlr :> IDisposable).Dispose()
 stop()
 *)
 
-let sub1 = cntlr.Monitor.Subscribe(fun msg -> printfn "%A" msg)
-let sub2 = cntlr.Telemetry.Subscribe(fun msg -> printfn "%A" msg)
+let sub1 = cntlr.Monitor.Subscribe (printfn "%A")
+let sub3 = cntlr.ConfigObs.Subscribe (printfn "%A")
+
+let prevDroneState = ref (enum<ArdroneState>(0))
+let showTelemetry = function
+    | DroneState ds when ds = !prevDroneState -> ()
+    | DroneState ds -> prevDroneState := ds; printfn "%A" ds
+    | telemetry -> printfn "%A" telemetry
+//
+let sub2 = cntlr.Telemetry.Subscribe showTelemetry
+
 let connectionCts = new CancellationTokenSource()
 Async.Start(cntlr.ConnectAsync(connectionCts))
 
+cntlr.Send GetConfig
+
 cntlr.Emergency()
 
-let isLanded = function Landed      -> true | _ -> false
-let isFlying = function Flying _    -> true | _ -> false
-
-let takeoff = {Name="Takeoff"; Commands=WhenIn_RepeatTill (isLanded, Takeoff, isFlying)}

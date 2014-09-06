@@ -57,7 +57,9 @@
     <Compile Include="NavdataParsing.fs" />
     <Compile Include="DroneConnection.fs" />
     <Compile Include="DroneScript.fs" />
+    <Compile Include="Scripts.fs" />
     <Compile Include="DroneController.fs" />
+    <None Include="EnumTest.fsx" />
     <None Include="ObservableTest.fsx" />
     <None Include="SetupEnv.fsx" />
     <None Include="DroneTest1.fsx" />

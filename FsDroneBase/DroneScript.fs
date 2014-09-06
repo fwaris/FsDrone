@@ -1,22 +1,22 @@
 ﻿//implements the 'scripting language' for executing drone control sequences
-//the script can coordiate over command and telemetry channels or command and config channels
+//the script can coordiate over telemetry configuration and command channels
 namespace FsDrone
 open Extensions
-open System
 open FsDrone
 
-type FDS = DroneNavState    -> bool
 type FTM = Telemetry        -> bool
 type FCS = ConfigSetting    -> bool
 
 type TimeoutMS = int
 
-type StepResult<'T> = Continue of 'T| Done | Abort
+type ScriptResult = Done | Abort
+
+type Repeater = {When:FTM; Send:Command; Till:FTM} //if in start state, execute command till end state reached
 
 type ScriptCommand = 
-    | One of Command
-    | WhenIn_RepeatTill of FDS * Command * FDS  //if in start state, execute command till end state reached
-    | RepeatTill of Command * FDS               //repeat till end state reached
+    | Send of Command
+    | Repeat of Repeater  
+    | RepeatTill of Command * FTM               //repeat till end state reached
     | AwaitTelemetry of FTM * TimeoutMS         //wait till a Telemetry event occurs, script execution halts if timeout occurs first
     | AwaitConfig of FCS * TimeoutMS            //wait till a config event is received
     | Sequence of ScriptCommand list
@@ -25,50 +25,80 @@ type Script = {Name:string; Commands:ScriptCommand}
 
 module ScriptServices =
 
-    let inline waitTill ftm timeout continueOnTimeout fError obs =
+    let repeatDelayMS = 30 //time to wait before repeating a command
+
+    let awaitTelemetry telemetryObs inState timeout =
         async {
-            try 
-                let! r = Async.StartChild(async {obs |> Observable.till ftm },timeout) 
-                do! r
-                return Done
-            with ex -> 
-                fError "await timeout"
-                if continueOnTimeout then return Done else return Abort
+            let! r =
+                telemetryObs
+                |> Observable.filter inState
+                |> Observable.awaitAsync timeout
+            match r with
+            | Some _ -> return Done
+            | None   -> return Abort
         }
 
-    let inline singleStep fPost telemetryObs configObs fError cmd_State = 
+    let awaitConfig configObs inState timeout = //can inline to share awaitTelemetry but debugging is harder
         async {
-            match cmd_State with
-            | One cmd, _                                            -> fPost cmd; return Done
-            | WhenIn_RepeatTill (fds1,cmd,fds2), ds when (fds1 ds)  -> fPost cmd; return (Continue (RepeatTill(cmd,fds2)))
-            | WhenIn_RepeatTill _, _                                -> return Done
-            | RepeatTill (_,fds), ds when (fds ds)                  -> return Done
-            | RepeatTill (cmd,_) as scr, _                          -> fPost cmd; return (Continue scr)
-            | AwaitTelemetry (ftm,timeout),_                        -> return! waitTill ftm timeout false fError telemetryObs
-            | AwaitConfig (fcm,timeout),_                           -> return! waitTill fcm timeout false fError configObs
-            | Sequence _, _                                         -> return failwithf "sequence not expected"
+            let! r =
+                configObs
+                |> Observable.filter inState
+                |> Observable.awaitAsync timeout
+            match r with
+            | Some _ -> return Done
+            | None   -> return Abort
         }
 
-    let executeScript fDroneState fPost telemetryObs configObs fMonitor script =
-        let fError s = (script.Name,s) |> ScriptError  |> fMonitor
-        let step = singleStep fPost telemetryObs configObs fError
+    let repeatTill fPost telemetryObs cmd endState =
+        let rec loop() =
+            async {
+                let! r =
+                    telemetryObs 
+                    |> Observable.filter endState 
+                    |> Observable.awaitAsync repeatDelayMS
+                match r with
+                | Some _ -> return Done
+                | None   -> 
+                    fPost cmd
+                    return! loop()
+            }
+        loop()
+
+    let whenInRepeat fPost telemetryObs {When=startState; Send=cmd; Till=endState} =
+        async {
+            let! r = 
+                telemetryObs 
+                |> Observable.filter startState 
+                |> Observable.awaitAsync repeatDelayMS
+            match r with
+            | Some _ -> return! repeatTill fPost telemetryObs cmd endState
+            | None _ -> return Abort
+        }
+
+    let singleStep fPost telemetryObs configObs step = 
+        async {
+            match step with
+            | Send cmd                          -> fPost cmd; return Done
+            | Repeat repeater                   -> return! whenInRepeat fPost telemetryObs repeater
+            | RepeatTill (cmd,endState)         -> return! repeatTill fPost telemetryObs cmd endState
+            | AwaitTelemetry (inState,timeout)  -> return! awaitTelemetry telemetryObs inState timeout
+            | AwaitConfig (cfgFilter,timeout)   -> return! awaitConfig configObs cfgFilter timeout
+            | Sequence _                        -> return failwithf "sequence not expected"
+        }
+
+    let executeScript fPost telemetryObs configObs commands =
+        let step = singleStep fPost telemetryObs configObs 
         let rec loop cmd =
             async {
-                match cmd,fDroneState() with
-                | Sequence [],_                      -> ()
-                | Sequence (singleCmd::rest) , ds    ->
-                    let! r = step (singleCmd,ds)
+                match cmd with
+                | Sequence []                 -> return Done
+                | Sequence (singleCmd::rest)  ->
+                    let! r = step singleCmd
                     match r with
                     | Done          -> return! loop (Sequence rest)
-                    | Abort         -> ()
-                    | Continue cmd  -> return! loop (Sequence (cmd::rest))
-                | singleCmd,ds ->
-                    let! r = step (singleCmd,ds)
-                    match r with
-                    | Done          -> ()
-                    | Abort         -> ()
-                    | Continue cmd  -> return! loop cmd
+                    | Abort         -> return Abort
+                | singleCmd -> return! step singleCmd
             }
-        loop script.Commands
+        loop commands
 
 

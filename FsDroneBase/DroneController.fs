@@ -1,4 +1,5 @@
-﻿//implements the state machines for connection management and sending commands
+﻿//implements the state machines for connection management,
+//sending commands and executing scripts
 //also provides monitoring of drone connection
 namespace FsDrone
 open Extensions
@@ -30,37 +31,38 @@ module private ControllerServices =
         loop()
 
     ///sends the Hover command if drone is flying and no commnad has recently been sent
-    let startHoverLoop fConnection fDroneState fMonitor =
+    let startHoverLoop fConnection fPost fMonitor =
         async  {
             try
                 while true do
                     do! Async.Sleep 30000
-                    match fConnection(),fDroneState() with
-                    | Disconnected,_ | Connecting _ ,_ -> ()
-                    | Connected conn, Flying _ ->
+                    match fConnection() with
+                    | Disconnected | Connecting _  -> ()
+                    | Connected conn ->
                         let ts = conn.LastCommandSent()
                         let elapsed = (DateTime.Now - ts).TotalSeconds
-                        if elapsed > 1.0 then conn.Cmds.Post(Hover)
-                    | Connected _, _ -> ()
+                        if elapsed > 1.0 then fPost CommonScripts.hover
             with ex ->
                 fMonitor (HoverLoopError ex)
         }
     
     //
-    let scriptAgent fConnection fDroneState telemetryObs configObs fMonitor (inbox:Agent<Script>) =
+    let scriptAgent fConnection telemetryObs configObs fMonitor (inbox:Agent<Script>) =
         async {
             while true do
                 let! script = inbox.Receive()
+                printfn "executing %s" script.Name
                 try
                     match fConnection() with
                     | Connected conn -> 
-                        do! ScriptServices.executeScript 
-                                                        fDroneState 
+                        let! r = ScriptServices.executeScript  
                                                         conn.Cmds.Post
                                                         telemetryObs 
                                                         configObs
-                                                        fMonitor 
-                                                        script
+                                                        script.Commands
+                        match r with
+                        | Abort -> fMonitor (ScriptError (script.Name,"aborted"))
+                        | _ -> ()
                     | _ -> ()
                 with ex ->
                     fMonitor (ScriptError (script.Name,"no connection"))
@@ -71,9 +73,6 @@ type DroneController() =
     let cts = new System.Threading.CancellationTokenSource()
 
     let mutable connection = Disconnected
-    let setConnection conn = connection <- Connected conn
-
-    let mutable droneState = DroneNavState.Default
 
     let monitorObservable , fMonitor    = Observable.createObservableAgent(cts.Token)
     let telemtryObservable, fTelemetry  = Observable.createObservableAgent(cts.Token)
@@ -93,7 +92,6 @@ type DroneController() =
         }
 
     let getConnection() = connection
-    let getDroneState() = droneState
                 
     let disconnect() =
         match connection with
@@ -103,10 +101,10 @@ type DroneController() =
         connection <- Disconnected
         fMonitor (ConnectionState ConnectionState.Disconnected)
 
-    do Async.Start(ControllerServices.startHoverLoop getConnection getDroneState fMonitor,cts.Token)
 
-    let fScriptRunner = ControllerServices.scriptAgent  getConnection getDroneState telemtryObservable configObservable fMonitor
+    let fScriptRunner = ControllerServices.scriptAgent  getConnection telemtryObservable configObservable fMonitor
     let scriptAgent = Agent.Start(fScriptRunner,cts.Token)
+    do Async.Start(ControllerServices.startHoverLoop getConnection scriptAgent.Post fMonitor,cts.Token)
 
     member x.ConnectAsync (cts:CancellationTokenSource) = connectAsync cts
     member x.Disconnect()   = disconnect()
@@ -115,6 +113,7 @@ type DroneController() =
     member x.Telemetry      = telemtryObservable
     member x.ConfigObs      = configObservable
     member x.Run script     = scriptAgent.Post script
+    member x.Send command   = scriptAgent.Post {Name="Send"; Commands=Send command}
 
     interface IDisposable with
         member x.Dispose() =
