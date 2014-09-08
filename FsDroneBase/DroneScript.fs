@@ -25,7 +25,8 @@ type Script = {Name:string; Commands:ScriptCommand}
 
 module ScriptServices =
 
-    let repeatDelayMS = 30 //time to wait before repeating a command
+    let retryDelayMS      = 200 //time to wait before retrying a command
+    let maxCommandRetries = 10  //retry command this many times before giving up
 
     let awaitTelemetry telemetryObs inState timeout =
         async {
@@ -50,32 +51,38 @@ module ScriptServices =
         }
 
     let repeatTill fPost telemetryObs cmd endState =
-        let rec loop() =
+        let rec loop retries =
             async {
-                let! r =
-                    telemetryObs 
-                    |> Observable.filter endState 
-                    |> Observable.awaitAsync repeatDelayMS
-                match r with
-                | Some _ -> return Done
-                | None   -> 
+                if retries > maxCommandRetries then 
+                    return Abort
+                else
                     fPost cmd
-                    return! loop()
+                    let! r =
+                        telemetryObs 
+//                        |> Observable.map (fun s->printfn "%A" s; s)
+                        |> Observable.filter endState 
+                        |> Observable.awaitAsync retryDelayMS
+                    match r with
+                    | Some _ -> return Done
+                    | None   -> 
+                        do! Async.Sleep 10
+                        return! loop (retries + 1)
             }
-        loop()
+        loop 0
 
     let whenInRepeat fPost telemetryObs {When=startState; Send=cmd; Till=endState} =
         async {
             let! r = 
                 telemetryObs 
                 |> Observable.filter startState 
-                |> Observable.awaitAsync repeatDelayMS
+                |> Observable.awaitAsync retryDelayMS
             match r with
             | Some _ -> return! repeatTill fPost telemetryObs cmd endState
-            | None _ -> return Abort
+            | None   -> return Abort
         }
 
     let singleStep fPost telemetryObs configObs step = 
+        printfn "in step %A" step
         async {
             match step with
             | Send cmd                          -> fPost cmd; return Done

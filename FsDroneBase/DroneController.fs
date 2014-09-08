@@ -15,8 +15,10 @@ type private ControllerConnectionState =
 module private ControllerServices = 
 
     let applicationId = "fsdrone01"
-    let sessionId     = "fsdrone02"
-    let userId        = "fsdrone03"
+    let sessionId     = let rnd = new System.Random() in rnd.Next(10000,100000).ToString()
+    let userId        = "fsdrone02"
+
+    let getSession()  = {ApplicationId=applicationId; UserId=userId; SessionId=sessionId}
 
     let tryConnectAsync fMonitor fTelemetry fConfig =
         let rec loop() =
@@ -62,11 +64,19 @@ module private ControllerServices =
                                                         script.Commands
                         match r with
                         | Abort -> fMonitor (ScriptError (script.Name,"aborted"))
-                        | _ -> ()
+                        | _ -> printfn "done %s" script.Name
                     | _ -> ()
                 with ex ->
                     fMonitor (ScriptError (script.Name,"no connection"))
         }
+
+    let startWatchdog telemetryObs fConnection =
+        telemetryObs
+        |> Observable.filter StateQueries.inComWatchdog
+        |> Observable.subscribe (fun _ ->
+            match fConnection() with
+            | Connected conn -> conn.Cmds.Post Watchdog
+            | _ -> ())
 
 type DroneController() = 
 
@@ -101,10 +111,9 @@ type DroneController() =
         connection <- Disconnected
         fMonitor (ConnectionState ConnectionState.Disconnected)
 
-
     let fScriptRunner = ControllerServices.scriptAgent  getConnection telemtryObservable configObservable fMonitor
     let scriptAgent = Agent.Start(fScriptRunner,cts.Token)
-    do Async.Start(ControllerServices.startHoverLoop getConnection scriptAgent.Post fMonitor,cts.Token)
+    let wdSubscriber = ControllerServices.startWatchdog telemtryObservable getConnection   
 
     member x.ConnectAsync (cts:CancellationTokenSource) = connectAsync cts
     member x.Disconnect()   = disconnect()
@@ -114,9 +123,13 @@ type DroneController() =
     member x.ConfigObs      = configObservable
     member x.Run script     = scriptAgent.Post script
     member x.Send command   = scriptAgent.Post {Name="Send"; Commands=Send command}
+    member x.Session        = ControllerServices.getSession()
+    member x.StartBgTasks() =  
+        do Async.Start(ControllerServices.startHoverLoop getConnection scriptAgent.Post fMonitor,cts.Token)
 
     interface IDisposable with
         member x.Dispose() =
+            wdSubscriber.Dispose()
             disconnect()
             cts.Cancel()
  

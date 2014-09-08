@@ -1,8 +1,6 @@
 ﻿namespace FsDrone
 #nowarn "9"
 open System
-open System.Runtime.InteropServices
-open System.IO
 open Extensions
 open FsDrone
 
@@ -83,6 +81,4 @@ type MonitorMsg =
     | ConnectionState       of ConnectionState
     | ScriptError           of string * string
     | HoverLoopError        of Exception
-
- type ConfigSetting = {Name:string; Value:string}
 

@@ -1,4 +1,5 @@
-﻿namespace FsDrone
+﻿//parse binary data structures received from the drone
+namespace FsDrone
 open FsDrone
 open IOUtils
 open System.IO
@@ -159,8 +160,8 @@ module Parsing =
             prevSeqNum
         else
             let hdr = rdr.ReadUInt32()
-            if hdr <> magic_no1 then 
-                log "magic not matched"
+            if hdr <> magic_no1 && hdr <> magic_no2 then 
+                log (sprintf "magic not matched, got %d" hdr)
                 fError Parse
                 prevSeqNum
             else

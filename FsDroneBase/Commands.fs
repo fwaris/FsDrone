@@ -19,7 +19,11 @@ type Progress =
         PsiAccuracy : float32
      }
 
-type BlinkAnimation = {Animation:animation_id; Frequency:float32; Duration:seconds} //
+type BlinkAnimation = {Animation:animation_id; Frequency:float32; Duration:seconds}
+
+type ConfigSetting = {Name:string; Value:string}
+
+type Session = {ApplicationId:string; UserId:string; SessionId:string}
  
 type Command =
     | Land
@@ -29,7 +33,8 @@ type Command =
     | Progress of Progress
     | Flattrim
     | Calibrate of int
-    | Config of (string * string)
+    | Config of ConfigSetting
+    | SessionConfig of (Session * ConfigSetting)
     | Watchdog
     | Ack
     | GetConfig
@@ -41,14 +46,19 @@ module CommandUtils =
 
     //fprintf is not the fastest but generates least garbage
     let toATCommand txw seq_no = function
-        | Land          -> fprintf txw "AT*REF%d,%d\r" seq_no _land
-        | Takeoff       -> fprintf txw "AT*REF%d,%d\r" seq_no _takeoff
-        | Emergency     -> fprintf txw "AT*REF%d,%d\r" seq_no _emrgncy
-        | Hover         -> fprintf txw "AT*PCMD=%d,0,0,0,0,0\r" seq_no
-        | Progress (p)  -> fprintf txw "AT*PCMD_MAG=%d,%d,%f,%f,%f,%f,%f,%f\r" seq_no (int p.Mode) p.Roll p.Pitch p.Lift p.Yaw p.Psi p.PsiAccuracy
-        | Flattrim      -> fprintf txw "AT*FTRIM=%d,\r" seq_no
-        | Calibrate i   -> fprintf txw "AT*CALIB=%d,%d,\r" seq_no i
-        | Config (k,v)  -> fprintf txw """AT*CONFIG=%d,"%s","%s"\r""" seq_no k v
-        | Watchdog      -> fprintf txw "AT*COMWDG=%d\r" seq_no
-        | Ack           -> fprintf txw "AT*CTRL=%d,5,0\r" seq_no
-        | GetConfig     -> fprintf txw "AT*CTRL=%d,4,0\r" seq_no
+        | Land          -> fprintf txw "AT*REF%d,%d\r" !seq_no _land
+        | Takeoff       -> fprintf txw "AT*REF%d,%d\r" !seq_no _takeoff
+        | Emergency     -> fprintf txw "AT*REF%d,%d\r" !seq_no _emrgncy
+        | Hover         -> fprintf txw "AT*PCMD=%d,0,0,0,0,0\r" !seq_no
+        | Progress (p)  -> fprintf txw "AT*PCMD_MAG=%d,%d,%f,%f,%f,%f,%f,%f\r" !seq_no (int p.Mode) p.Roll p.Pitch p.Lift p.Yaw p.Psi p.PsiAccuracy
+        | Flattrim      -> fprintf txw "AT*FTRIM=%d,\r" !seq_no
+        | Calibrate i   -> fprintf txw "AT*CALIB=%d,%d,\r" !seq_no i
+        | Watchdog      -> fprintf txw "AT*COMWDG=%d\r" !seq_no
+        | Ack           -> fprintf txw "AT*CTRL=%d,5,0\r" !seq_no
+        | GetConfig     -> fprintf txw "AT*CTRL=%d,4,0\r" !seq_no
+        | Config {Name=k;Value=v} -> fprintf txw "AT*CONFIG=%d,\"%s\",\"%s\"\r" !seq_no k v
+        | SessionConfig ({ApplicationId=appId; UserId=uid; SessionId=sid}, {Name=k;Value=v})  -> 
+            let s1  = !seq_no
+            seq_no := !seq_no + 1
+            let s2  = !seq_no
+            fprintf txw "AT*CONFIG_IDS=%d,%s,%s,%s\rAT*CONFIG=%d,\"%s\",\"%s\"\r" s1 appId uid sid s2 k v 

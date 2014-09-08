@@ -31,7 +31,8 @@ module private ConnectionServices =
                         let! msg = inbox.Receive()
                         seqNum := !seqNum + 1
                         buffer.Reset()
-                        toATCommand buffer.TextWriter !seqNum msg
+                        toATCommand buffer.TextWriter seqNum msg
+                        match msg with Watchdog -> () | _ -> printfn "%s" (Encoding.ASCII.GetString(buffer.ByteArray,0,buffer.Length-1))
                         skt.SendTo(buffer.ByteArray,buffer.Length, SocketFlags.None, endpoint) |> ignore
                         fSetTimestamp()
                     with ex -> 

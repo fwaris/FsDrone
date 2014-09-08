@@ -7,4 +7,5 @@
 #load "NavdataParsing.fs"
 #load "DroneConnection.fs"
 #load "DroneScript.fs"
+#load "Scripts.fs"
 #load "DroneController.fs"
