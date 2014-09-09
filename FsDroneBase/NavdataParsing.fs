@@ -52,7 +52,7 @@ module Parsing =
 
     let gpsEpoch = DateTime(1980,1,6, 0,0,0, DateTimeKind.Utc)
 
-    let inline processGPSOption (rdr:BinaryReader) length fPost =
+    let inline processGPSOption (rdr:BinaryReader) fPost =
         let lat         = rdr.ReadDouble()
         let lon         = rdr.ReadDouble()
         let elevation   = rdr.ReadDouble()
@@ -107,7 +107,7 @@ module Parsing =
                 }
             )
 
-    let inline processDemoOption (rdr:BinaryReader) length fPost =
+    let processDemoOption (rdr:BinaryReader) fPost =
         let flyState     = rdr.ReadUInt16()
         let controlState = rdr.ReadUInt16()
         let batteryLevel = rdr.ReadUInt32()
@@ -119,7 +119,6 @@ module Parsing =
         let vy = rdr.ReadSingle()
         let vz = rdr.ReadSingle()
         let frameIdx = rdr.ReadUInt32()
-        rdr.BaseStream.Skip (int64 length - rdr.BaseStream.Position) //skip rest of the navdata option
         fPost
             (NavState 
                 (match controlState with 
@@ -134,22 +133,29 @@ module Parsing =
                     Altitude        = float alt
                 })
 
-    let inline processOption (rdr:BinaryReader) length fPost fError = function
-        | NavdataOption.Demo -> processDemoOption rdr length fPost
-        | NavdataOption.GPS  -> processGPSOption rdr length fPost
-        | o -> fError (UnhandledOption o)
+    let inline processOption (rdr:BinaryReader) fPost fError = function
+        | NavdataOption.Demo -> processDemoOption rdr fPost
+        | NavdataOption.GPS  -> processGPSOption rdr fPost
+        | o ->  fError (UnhandledOption o)
 
     let processOptions (rdr:BinaryReader) fPost fError =
-        let rec loop len = function
+        let startPos        = rdr.BaseStream.Position
+        let optionTag       = LanguagePrimitives.EnumOfValue (rdr.ReadUInt16())
+        let optionSz        = rdr.ReadUInt16()
+        let nextOptionPos   = startPos + int64 optionSz
+        //
+        let rec loop nextOptionPos option = 
+            match option with
             | NavdataOption.Checksum -> ()
             | opt -> 
-                processOption rdr len fPost fError opt
-                let optionTag = rdr.ReadUInt16()
-                let optionSz  = rdr.ReadUInt16()
-                loop optionSz (LanguagePrimitives.EnumOfValue optionTag)
-        let optionTag = rdr.ReadUInt16()
-        let optionSz  = rdr.ReadUInt16()
-        loop optionSz (LanguagePrimitives.EnumOfValue optionTag)
+                processOption rdr fPost fError opt
+                rdr.BaseStream.Position <- nextOptionPos //set to read next option; some options are skipped so need to reposition
+                let optionTag       = LanguagePrimitives.EnumOfValue (rdr.ReadUInt16())
+                let optionSz        = rdr.ReadUInt16()
+                let nextOptionPos   = nextOptionPos + int64 optionSz
+                loop nextOptionPos optionTag
+        //
+        loop nextOptionPos optionTag
 
     let headersize = 16
 

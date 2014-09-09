@@ -27,10 +27,10 @@ System.Console.ReadLine() |> ignore
 
 //cntlr.Send GetConfig
 //
-//cntlr.Run (CommonScripts.bootstrap cntlr.Session)
 cntlr.Run (CommonScripts.setConfig {Name="custom:session_id"; Value=cntlr.Session.SessionId })
 cntlr.Run (CommonScripts.setConfig {Name="custom:profile_id"; Value=cntlr.Session.UserId})
 cntlr.Run (CommonScripts.setConfig {Name="custom:application_id"; Value=cntlr.Session.ApplicationId})
+cntlr.Run (CommonScripts.bootstrap cntlr.Session)
 
 System.Console.WriteLine("enter to close")
 System.Console.ReadLine() |> ignore
